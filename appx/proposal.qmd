@@ -2,4 +2,45 @@
 title: "Proposal"
 ---
 
-Your proposal go here.
+# Title
+Downstream Effects of Redlining: A Case Study in Atlanta 
+
+# Names
+Andrew Lamb, Arun Waran, Bowen Tang
+
+# Project description
+We are looking at disproportionate harm caused to historical redlined districts in Atlanta. We will look at factors such as green spaces, harmful industrial practices, food disparity, walkability, and other factors that would cause worse living conditions. Also how these districts have been economically held back.
+
+# Potential research questions
+Where are there harmful industrial practices in Atlanta and does this line up with historically redlined districts? Who lives in historically redlined areas, and how is their quality of life? What are income levels sorted by redlined districts? 
+
+# Inspirations
+To bring light to the fact that historical inequity has present day effects, to show why initiatives like DEI are important and have precedence.
+
+# Potential datasets 
+To look at redlined districts in Atlanta we can use https://dsl.richmond.edu/panorama/redlining/static/mappinginequality.json.
+We could also use census data for income in these areas.
+
+# Communication plan
+We will primarily use Google Chat for communication, members are expected to respond within 24 hours of a question being asked. We will meet at least once a week during the week, and if needed we can add a day on the weekend. 
+
+# Project leads
+Andrew - Tech lead, Arun - Point of contact, Bowen - Style lead
+
+# Conflict resolution/accountability
+If a team member misses a deadline, the first offense will be a warning for the member and we will ask why they missed the deadline. After that we will report that they are not contributing to the group and will remove their name from that section of the project. If there is a 50/50 split we will get an outside perspective to mediate the conflict.
+
+# Implementation plan
+Work is expected to be done a day before the due date (excepting the final video which will be made together), so members can discuss with the team before submission.
+By 11/5, each member will individually submit their writeup about effective teamwork and discuss w/each other.
+By 11/11, we will identify a model project from the list of examples and then record our expectations.
+By 11/15, we will have identified our final datasets and imported them into R for cleaning.
+By 11/18, we will have finished our EDAs and solicited feedback from one another to see techniques used.
+By 11/24, we will have completed all major wrangling and plans for visualizations, and set up a plan to implement it.
+By 11/28, we will have prepared a preliminary report to present.
+By 12/5, we will have finished a first pass on all of our analysis and write-up to edit together.
+By 12/7, we will have combined everything and made edits to present to the class for the second time.
+By 12/12, we will have incorporated edits suggested by peers and the professor to include in the video.
+By 12/14, we will have finished our video explanation and uploaded all deliverables to the Github repository.
+
+
