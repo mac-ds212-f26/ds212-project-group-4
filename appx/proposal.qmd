@@ -2,7 +2,7 @@
 title: "Proposal"
 ---
 
-# Title
+## Title
 Downstream Effects of Redlining: A Case Study in Atlanta 
 
 # Names
