@@ -1,5 +1,132 @@
 ---
-title: "Member 1 First Name & Last Name Initial"
+title: "Andrew Lamb EDA"
 ---
 
-Your exploratory data analysis of the team datasets go here.
+```{r}
+library(tidycensus)
+library(dplyr)
+library(tidyr)
+library(sf)
+
+census_key <- readLines("../../../repos/ds212-hw-alamb378/hw03/src/census_api_key")
+
+
+# Disable spherical geometry issues during spatial joins
+sf_use_s2(FALSE)
+
+# 1. Define Race Suffixes & Variables (Same as before)
+races <- c(
+  "A" = "White Alone",
+  "B" = "Black or African American Alone",
+  "C" = "American Indian and Alaska Native Alone",
+  "D" = "Asian Alone",
+  "E" = "Native Hawaiian and Other Pacific Islander Alone",
+  "F" = "Some Other Race Alone",
+  "G" = "Two or More Races",
+  "H" = "White Alone, Not Hispanic or Latino",
+  "I" = "Hispanic or Latino"
+)
+
+vars_to_pull <- c()
+for (code in names(races)) {
+  vars_to_pull <- c(
+    vars_to_pull,
+    setNames(paste0("B19013", code, "_001"), paste0("median_", code)),
+    setNames(paste0("B19025", code, "_001"), paste0("agg_inc_", code)),
+    setNames(paste0("B19001", code, "_001"), paste0("hh_count_", code))
+  )
+}
+
+target_states <- c("GA", "MN", "MI", "MO", "LA", "PA")
+target_fips <- c(
+  "13121", # Fulton County, GA (Atlanta) - add "13089" if you also want DeKalb
+  "27123", # Ramsey County, MN (St. Paul)
+  "26163", # Wayne County, MI (Detroit)
+  "29510", # St. Louis city, MO (Independent City)
+  "22071", # Orleans Parish, LA (New Orleans)
+  "42003"  # Allegheny County, PA (Pittsburgh)
+)
+
+# 2. Example: Pull Tract-Level Data for Ramsey County (St. Paul, MN) with Geometry
+tract_raw <- get_acs(
+  geography = "tract",
+  variables = vars_to_pull,
+  state = target_states,
+  year = 2024,
+  survey = "acs5",
+  output = "wide",
+  key = census_key,
+  geometry = TRUE # Downloads tract boundary polygons
+)%>%
+  filter(substr(GEOID, 1, 5) %in% target_fips)
+
+# 1. Separate geometry so tidyr pivoting runs cleanly on a plain tibble
+tract_geom <- tract_raw %>%
+  select(GEOID, geometry)
+
+# 2. Clean and reshape the tabular data
+tract_clean <- tract_raw %>%
+  st_drop_geometry() %>%
+  select(GEOID, NAME, ends_with("E")) %>%
+  pivot_longer(
+    cols = starts_with(c("median_", "agg_inc_", "hh_count_")),
+    names_to = c("metric", "race_code"),
+    names_pattern = "^(median|agg_inc|hh_count)_([A-I])E$",
+    values_to = "value"
+  ) %>%
+  pivot_wider(
+    names_from = metric,
+    values_from = value
+  ) %>%
+  mutate(
+    county_fips = substr(GEOID, 1, 5),
+    city = case_when(
+      county_fips == "13121" ~ "Atlanta",
+      county_fips == "27123" ~ "St. Paul",
+      county_fips == "26163" ~ "Detroit",
+      county_fips == "29510" ~ "St. Louis",
+      county_fips == "22071" ~ "New Orleans",
+      county_fips == "42003" ~ "Pittsburgh"
+    ),
+    race = recode(race_code, !!!races),
+    mean_income = if_else(hh_count > 0, round(agg_inc / hh_count, 0), NA_real_)
+  ) %>%
+  select(
+    GEOID,
+    city,
+    county_fips,
+    tract_name = NAME,
+    race_code,
+    race,
+    households = hh_count,
+    median_income = median,
+    mean_income
+  )
+
+# 3. Re-attach geometry if you are mapping or doing spatial joins
+tract_clean_sf <- tract_geom %>%
+  right_join(tract_clean, by = "GEOID")
+
+# 4. Spatial Join to Official City Neighborhood Boundaries
+# Replace the URL/path below with the GeoJSON/Shapefile from each city's Open Data Portal
+neighborhoods_sf <- st_read("../data/raw/geojson.json") %>%
+  st_transform(st_crs(tract_clean)) # Ensure matching coordinate reference systems
+
+# Match tract center-points to neighborhood polygons
+tract_with_neighborhood <- tract_clean %>%
+  st_point_on_surface() %>%
+  st_join(neighborhoods_sf, join = st_within) %>%
+  st_drop_geometry()
+```
+
+
+```{r}
+library(tidycensus)
+library(dplyr)
+library(tidyr)
+
+income_data <- read.csv("../data/raw/clean_income_data.csv")
+
+View(income_data)
+```
+
