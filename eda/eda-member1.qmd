@@ -90,7 +90,7 @@ tract_clean <- tract_raw %>%
     ),
     race = recode(race_code, !!!races),
     mean_income = if_else(hh_count > 0, round(agg_inc / hh_count, 0), NA_real_)
-  ) %>%
+  )  |> 
   select(
     GEOID,
     city,
@@ -107,16 +107,20 @@ tract_clean <- tract_raw %>%
 tract_clean_sf <- tract_geom %>%
   right_join(tract_clean, by = "GEOID")
 
+#write_sf(tract_clean_sf, "../data/raw/clean_income_data.shp")
+
+#Try later
+
 # 4. Spatial Join to Official City Neighborhood Boundaries
 # Replace the URL/path below with the GeoJSON/Shapefile from each city's Open Data Portal
-neighborhoods_sf <- st_read("../data/raw/geojson.json") %>%
-  st_transform(st_crs(tract_clean)) # Ensure matching coordinate reference systems
+#neighborhoods_sf <- st_read("../data/raw/geojson.json") %>%
+  #st_transform(st_crs(tract_clean)) # Ensure matching coordinate reference systems
 
 # Match tract center-points to neighborhood polygons
-tract_with_neighborhood <- tract_clean %>%
-  st_point_on_surface() %>%
-  st_join(neighborhoods_sf, join = st_within) %>%
-  st_drop_geometry()
+#tract_with_neighborhood <- tract_clean %>%
+ # st_point_on_surface() %>%
+  #st_join(neighborhoods_sf, join = st_within) %>%
+  #st_drop_geometry()
 ```
 
 
@@ -124,9 +128,55 @@ tract_with_neighborhood <- tract_clean %>%
 library(tidycensus)
 library(dplyr)
 library(tidyr)
+library(foreign)
 
-income_data <- read.csv("../data/raw/clean_income_data.csv")
 
-View(income_data)
+income_data_sf <- read_sf("../data/raw/clean_income_data.shp")
+
+historical_redlining_indacator <- read.dbf("../data/raw/HRI2020.dbf", as.is = TRUE)
+
+tract_HRI_sf <- income_data_sf |> 
+  left_join(historical_redlining_indacator |> 
+              mutate(GEOID = GEOID20) |> 
+              select(GEOID, HRI2020, RHRI2020), join_by(GEOID)
+            )
+#write_sf(tract_HRI_sf, "../data/processed/tract_HRI_sf.shp")  
+
 ```
+
+
+
+```{r}
+library("ISLR")
+library("SmartEDA")
+
+tract_HRI_sf <- read_sf("../data/processed/tract_HRI_sf.shp")
+
+# 1. Read the .dbf file directly (automatically converts '****' to NA)
+df <- read.dbf("../data/processed/tract_HRI_sf.dbf", as.is = TRUE)
+
+# Convert categorical variables to factors for SmartEDA & ISLR modeling
+df$race_cd <- as.factor(df$race_cd)
+df$race    <- as.factor(df$race)
+
+# 2. SmartEDA: High-level dataset overview (rows, columns, missingness)
+ExpData(data = df, type = 1)
+
+# 3. SmartEDA: Variable-by-variable structure, data types, and % missing
+ExpData(data = df, type = 2)
+
+# 4. SmartEDA: Summary statistics for numeric variables (households, income, HRI)
+ExpNumStat(df, by = "A", Outlier = TRUE, round = 2)
+
+# 5. SmartEDA: Income distribution grouped by race/ethnicity
+ExpNumStat(df, by = "G", gp = "race_cd", Outlier = TRUE, round = 2)
+
+# 6. SmartEDA: Categorical frequency tables
+ExpCTable(df)
+
+# 7. Generate a full interactive HTML EDA report
+ExpReport(df, op_file = "Atlanta_Tracts_EDA.html")
+```
+
+
 
