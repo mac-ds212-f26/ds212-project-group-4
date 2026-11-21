@@ -1,5 +1,441 @@
 ---
-title: "Member 3 First Name & Last Name Initial"
+title: "Arun W"
 ---
 
-Your exploratory data analysis of the team datasets go here.
+## Data and preparation
+
+```{r}
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(foreign)
+library(SmartEDA)
+library(scales)
+library(knitr)
+
+options(tigris_use_cache = TRUE)
+```
+
+My EDA uses data from the Census Bureau's ACS five-year estimates for 2020-2024. These include separate estimates for different racial and ethnic groups. I combined these data with the Historic Redlining Indicator, which measures historical redlining at the census level. (Note: we did use the same loading and merge code, but did separate EDAs)
+
+```{r}
+census_key <- readLines("../../ds212-portfolio-awaran-jpg/ica/census_api_key.txt")
+
+# Disable spherical geometry issues during spatial joins
+sf_use_s2(FALSE)
+
+# 1. Define Race Suffixes & Variables
+races <- c(
+  "A" = "White Alone",
+  "B" = "Black or African American Alone",
+  "C" = "American Indian and Alaska Native Alone",
+  "D" = "Asian Alone",
+  "E" = "Native Hawaiian and Other Pacific Islander Alone",
+  "F" = "Some Other Race Alone",
+  "G" = "Two or More Races",
+  "H" = "White Alone, Not Hispanic or Latino",
+  "I" = "Hispanic or Latino"
+)
+
+vars_to_pull <- c()
+for (code in names(races)) {
+  vars_to_pull <- c(
+    vars_to_pull,
+    setNames(paste0("B19013", code, "_001"), paste0("median_", code)),
+    setNames(paste0("B19025", code, "_001"), paste0("agg_inc_", code)),
+    setNames(paste0("B19001", code, "_001"), paste0("hh_count_", code))
+  )
+}
+
+target_states <- c("GA", "MN", "MI", "MO", "LA", "PA")
+target_fips <- c(
+  "13121", # Fulton County, GA
+  "27123", # Ramsey County, MN
+  "26163", # Wayne County, MI
+  "29510", # St. Louis City, MO
+  "22071", # Orleans Parish, LA
+  "42003"  # Allegheny County, PA
+)
+
+# 2. Pull Tract-Level Data
+tract_raw <- get_acs(
+  geography = "tract",
+  variables = vars_to_pull,
+  state = target_states,
+  year = 2024,
+  survey = "acs5",
+  output = "wide",
+  key = census_key,
+  geometry = TRUE
+) %>%
+  filter(substr(GEOID, 1, 5) %in% target_fips)
+
+# 1. Separate geometry
+tract_geom <- tract_raw %>%
+  select(GEOID, geometry)
+
+# 2. Clean and reshape the tabular data
+tract_clean <- tract_raw %>%
+  st_drop_geometry() %>%
+  select(GEOID, NAME, ends_with("E")) %>%
+  pivot_longer(
+    cols = starts_with(c("median_", "agg_inc_", "hh_count_")),
+    names_to = c("metric", "race_code"),
+    names_pattern = "^(median|agg_inc|hh_count)_([A-I])E$",
+    values_to = "value"
+  ) %>%
+  pivot_wider(
+    names_from = metric,
+    values_from = value
+  ) %>%
+  mutate(
+    county_fips = substr(GEOID, 1, 5),
+    city = case_when(
+      county_fips == "13121" ~ "Atlanta",
+      county_fips == "27123" ~ "St. Paul",
+      county_fips == "26163" ~ "Detroit",
+      county_fips == "29510" ~ "St. Louis",
+      county_fips == "22071" ~ "New Orleans",
+      county_fips == "42003" ~ "Pittsburgh"
+    ),
+    race = recode(race_code, !!!races),
+    mean_income = if_else(
+      hh_count > 0,
+      round(agg_inc / hh_count, 0),
+      NA_real_
+    )
+  ) %>%
+  select(
+    GEOID,
+    city,
+    county_fips,
+    tract_name = NAME,
+    race_code,
+    race,
+    households = hh_count,
+    median_income = median,
+    mean_income
+  )
+
+# 3. Reattach geometry
+tract_clean_sf <- tract_geom %>%
+  right_join(tract_clean, by = "GEOID")
+
+# Save the cleaned shapefile
+write_sf(
+  tract_clean_sf,
+  "../data/raw/clean_income_data.shp",
+  delete_dsn = TRUE
+)
+```
+
+```{r}
+income_data_sf <- read_sf("../data/raw/clean_income_data.shp")
+
+historical_redlining_indicator <- read.dbf(
+  "../data/raw/HRI2020.dbf",
+  as.is = TRUE
+)
+
+tract_HRI_sf <- income_data_sf %>%
+  left_join(
+    historical_redlining_indicator %>%
+      mutate(GEOID = as.character(GEOID20)) %>%
+      select(GEOID, HRI2020, RHRI2020),
+    join_by(GEOID)
+  ) %>%
+  mutate(
+    mdn_ncm = if_else(
+      mdn_ncm > 0, mdn_ncm, NA_real_
+    ),
+    men_ncm = if_else(
+      men_ncm >= 0, men_ncm, NA_real_
+    )
+  )
+
+write_sf(
+  tract_HRI_sf,
+  "../data/processed/tract_HRI_sf.shp",
+  delete_dsn = TRUE
+)
+```
+
+## Initial data exploration
+
+I first use the SmartEDA package to examine the structure and summary statistics of the full dataset, then switch to Ramsey County.
+
+```{r}
+tracts_sf <- read_sf("../data/processed/tract_HRI_sf.shp")
+
+df <- tracts_sf %>%
+  st_drop_geometry()
+
+df$race_cd <- as.factor(df$race_cd)
+df$race <- as.factor(df$race)
+
+ExpData(data = df, type = 1)
+
+ExpData(data = df, type = 2)
+
+ExpNumStat(df, by = "A", Outlier = TRUE, round = 2)
+
+ExpNumStat(
+  df,
+  by = "G",
+  gp = "race_cd",
+  Outlier = TRUE,
+  round = 2
+)
+
+ExpCTable(df)
+
+ExpReport(
+  df,
+  op_file = "Full_EDA.html"
+)
+```
+
+## Ramsey County
+
+The remainder of the EDA focuses on Ramsey County, including St. Paul and other municipalities. It is first important to examine data completeness before exploring the relationship between historical redlining and contemporary household income.
+
+### Data availability
+
+```{r}
+ramsey <- tracts_sf %>%
+  filter(cnty_fp == "27123") %>%
+  st_drop_geometry()
+
+ramsey_tracts <- ramsey %>%
+  distinct(GEOID, .keep_all = TRUE)
+
+ramsey %>%
+  count(GEOID) %>%
+  count(n, name = "tracts") %>%
+  knitr::kable(
+    caption = "Observations per census tract"
+  )
+
+# Check HRI coverage
+ramsey_tracts %>%
+  summarize(
+    total_tracts = n(),
+    hri_available = sum(!is.na(HRI2020)),
+    hri_missing = sum(is.na(HRI2020))
+  ) %>%
+  knitr::kable(
+    caption = "Historical redlining data availability"
+  )
+
+summary(ramsey_tracts$HRI2020)
+```
+
+The subset has 143 census tracts, of which 73 have Historic Redlining Indicator (HRI) values. Among these tracts, HRI scores range from 1 to 4, with a median of 3. Higher scores indicate less favorable historical Home Owners' Loan Corporation (HOLC) residential security grades and a greater degree of historical redlining. However, 70 tracts lack scores, which limits the geographic coverage of comparisons with HRI.
+
+```{r}
+income_coverage <- ramsey %>%
+  group_by(race) %>%
+  summarize(
+    tracts = n(),
+    available = sum(!is.na(mdn_ncm)),
+    share = available / tracts,
+    .groups = "drop"
+  )
+
+income_coverage %>%
+  mutate(share = percent(share, accuracy = 0.1)) %>%
+  knitr::kable(
+    caption = "Availability of income estimates by racial and ethnic group"
+  )
+
+ggplot(
+  income_coverage,
+  aes(x = reorder(race, share), y = share)) +
+  geom_col(fill = "blue") +
+  coord_flip() +
+  scale_y_continuous(
+    labels = label_percent(),
+    limits = c(0, 1)
+  ) +
+  labs(
+    title = "Availability of median household income estimates",
+    x = NULL,
+    y = "Share of census tracts with available estimates"
+  ) +
+  theme_minimal()
+```
+
+The availability of median household income estimates varies considerably across race and ethnicity. Estimates are available for nearly all tracts for White households, but only about half for Black households and fewer for several other groups. The missing observations are important to consider since available income estimates may not be representative of the entire county.
+
+### Spatial distribution of race and income
+
+```{r}
+black_share <- ramsey %>%
+  filter(race_cd %in% LETTERS[1:7]) %>%
+  group_by(GEOID) %>%
+  summarize(
+    black_households = hoshlds[race_cd == "B"],
+    total_households = sum(hoshlds),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    black_share = if_else(
+      total_households > 0,
+      black_households / total_households,
+      NA_real_
+    )
+  )
+
+ramsey_map <- tracts_sf %>%
+  filter(cnty_fp == "27123", race_cd == "A") %>%
+  left_join(black_share, by = "GEOID")
+
+summary(ramsey_map$black_share)
+
+ggplot(ramsey_map) +
+  geom_sf(
+    aes(fill = black_share),
+    color = "white",
+    linewidth = 0.15
+  ) +
+  scale_fill_viridis_c(
+    labels = label_percent(),
+    na.value = "gray",
+    name = "Household share"
+  ) +
+  coord_sf(datum = NA) +
+  labs(
+    title = "Black householders in Ramsey County",
+    subtitle = "Share of households by census tract"
+  ) +
+  theme_void()
+```
+
+The distribution of households with Black householders varies considerably. Higher concentrations mostly appear around University Avenue corridor and the downtown area of St. Paul. The median tract has 8.7% Black householders, and the maximum exceeds 80%. This is relevant to our investigation of how income differences are distributed geographically. (this is different than the total Black proportion of the county population)
+
+```{r}
+income_map <- tracts_sf %>%
+  filter(
+    cnty_fp == "27123",
+    race_cd %in% c("B", "H")
+  ) %>%
+  mutate(
+    group = case_when(
+      race_cd == "B" ~ "Black",
+      race_cd == "H" ~ "White, non-Hispanic"
+    )
+  )
+
+income_map %>%
+  st_drop_geometry() %>%
+  group_by(group) %>%
+  summarize(
+    tracts = n(),
+    income_available = sum(!is.na(mdn_ncm)),
+    .groups = "drop"
+  )
+
+ggplot(income_map) +
+  geom_sf(
+    aes(fill = mdn_ncm),
+    color = "white",
+    linewidth = 0.15
+  ) +
+  facet_wrap(~ group, ncol = 2) +
+  scale_fill_viridis_c(
+    option = "magma",
+    labels = label_dollar(),
+    na.value = "gray",
+    name = "Median income"
+  ) +
+  coord_sf(datum = NA) +
+  labs(
+    title = "Median household income across Ramsey County",
+    subtitle = "Estimates by racial group",
+    caption = "Grey tracts indicate unavailable income estimates."
+  ) +
+  theme_void()
+```
+
+The spatial distribution of household income also varies, both geographically and across racial groups. In many tracts where estimates are available for both groups, median household income appears higher for non-Hispanic White households than for Black households. However, estimates are available for 140 of 143 tracts for non-Hispanic White households, compared with only 71 for Black households. This limits the geographic coverage of direct comparisons.
+
+```{r}
+income_difference <- ramsey %>%
+  filter(race_cd %in% c("B", "H")) %>%
+  select(GEOID, race_cd, mdn_ncm) %>%
+  pivot_wider(
+    names_from = race_cd,
+    values_from = mdn_ncm
+  ) %>%
+  filter(!is.na(B), !is.na(H)) %>%
+  mutate(
+    difference = H - B
+  )
+
+income_difference %>%
+  summarize(
+    tracts = n(),
+    median_difference = median(difference),
+    mean_difference = mean(difference),
+    share_white_higher = mean(difference > 0)
+  ) %>%
+  mutate(
+    share_white_higher = percent(share_white_higher, accuracy = 0.1)
+  ) %>%
+  knitr::kable(
+    caption = "Within-tract differences in median household income"
+  )
+```
+
+Among the census tracts with available estimates for both groups, White median household income exceeds Black median household income in approximately 84% of cases. The median within-tract difference is $28,410. These results provide further evidence of substantial racial income differences in Ramsey County.
+
+### Historical redlining and household income
+
+```{r}
+hri_income <- ramsey %>%
+  filter(
+    race_cd %in% c("B", "H"),
+    !is.na(HRI2020),
+    !is.na(mdn_ncm)
+  ) %>%
+  mutate(
+    group = case_when(
+      race_cd == "B" ~ "Black",
+      race_cd == "H" ~ "White, non-Hispanic"
+    )
+  )
+
+hri_income %>%
+  group_by(group) %>%
+  summarize(
+    tracts = n(),
+    .groups = "drop"
+  ) %>%
+  knitr::kable(
+    caption = "Observations available for HRI-income comparisons"
+  )
+
+ggplot(hri_income, aes(x = HRI2020, y = mdn_ncm)) +
+  geom_point(
+    alpha = 0.6,
+    size = 2,
+    color = "blue"
+  ) +
+  geom_smooth(
+    method = "lm",
+    se = FALSE,
+    color = "red"
+  ) +
+  facet_wrap(~ group) +
+  scale_x_continuous(breaks = 1:4) +
+  scale_y_continuous(labels = label_dollar()) +
+  labs(
+    title = "Historical redlining and household income",
+    subtitle = "Ramsey County census tracts",
+    x = "Historic Redlining Indicator",
+    y = "Median household income"
+  ) +
+  theme_minimal()
+```
+
+The relationship between historical redlining and contemporary median household income appears negative for both Black and non-Hispanic White households. Tracts with higher HRI scores generally have lower income estimates, although there is  considerable variation. These comparisons include 40 tracts with available Black household income estimates and 71 with available non-Hispanic White household income estimates.

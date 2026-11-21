@@ -1,0 +1,147 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+# Run once if needed:
+# install.packages(c("tidyverse", "maps"))
+
+library(tidyverse)
+library(maps)
+
+# 1. Read Grambank data directly from GitHub
+base_url <- paste0(
+  "https://raw.githubusercontent.com/rfordatascience/tidytuesday/",
+  "main/data/2026/2026-11-03/"
+)
+
+languages <- read_csv(
+  paste0(base_url, "grambank_languages.csv"),
+  show_col_types = FALSE
+)
+
+parameters <- read_csv(
+  paste0(base_url, "grambank_parameters.csv"),
+  show_col_types = FALSE
+)
+
+values <- read_csv(
+  paste0(base_url, "grambank_values.csv"),
+  show_col_types = FALSE
+)
+
+# 2. Check the feature definition
+parameters |>
+  filter(parameter_id == "GB051") |>
+  select(parameter_id, feature_name) |>
+  print()
+
+# 3. Keep language varieties with a recorded GB051 value
+gender <- values |>
+  filter(parameter_id == "GB051", value %in% c(0L, 1L)) |>
+  inner_join(languages, by = "language_id")
+
+# 4. Export the language varieties with masculine and feminine noun genders
+languages_with_gender <- gender |>
+  filter(value == 1L) |>
+  select(language_name, macroarea, family_name, glottocode) |>
+  arrange(macroarea, language_name)
+
+print(languages_with_gender)
+write_csv(languages_with_gender, "languages_with_masculine_feminine_gender.csv")
+
+# 5. Calculate regional percentages
+regional_summary <- gender |>
+  filter(!is.na(macroarea)) |>
+  group_by(macroarea) |>
+  summarise(
+    with_gender = sum(value == 1L),
+    total_recorded = n(),
+    percent = round(100 * with_gender / total_recorded, 1),
+    .groups = "drop"
+  ) |>
+  arrange(desc(percent))
+
+print(regional_summary)
+
+# 6. Prepare the world map and language locations
+world <- map_data("world")
+
+map_points <- gender |>
+  drop_na(longitude, latitude) |>
+  arrange(value)  # Draw blue points last where points overlap
+
+# 7. Draw the map
+gender_map <- ggplot() +
+  geom_polygon(
+    data = world,
+    aes(x = long, y = lat, group = group),
+    fill = "grey95",
+    color = "grey82",
+    linewidth = 0.2
+  ) +
+  geom_point(
+    data = map_points,
+    aes(x = longitude, y = latitude, color = factor(value)),
+    size = 1.1,
+    alpha = 0.8
+  ) +
+  scale_color_manual(
+    name = NULL,
+    values = c("1" = "#0072B2", "0" = "#D55E00"),
+    breaks = c("1", "0"),
+    labels = c(
+  "With masculine and feminine noun genders",
+  "Without masculine and feminine noun genders"
+)
+  ) +
+  coord_fixed(
+    xlim = c(-183, 183),
+    ylim = c(-92, 92),
+    expand = FALSE
+  ) +
+  labs(
+    title = "Where do languages distinguish masculine and feminine noun genders?",
+    subtitle = paste0(
+      "They are most common in Australia (33%) and least common in Papunesia (10%) "),
+    caption = "By Bowen Tang , Data from Grambank via TidyTuesday (November 3, 2026)"
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 3, alpha = 1))) +
+  theme_void() +
+  theme(
+    plot.title.position = "plot",
+    plot.title = element_text(size = 13, face = "bold", margin = margin(b = 4)),
+    plot.subtitle = element_text(size = 10, color = "grey35"),
+    plot.caption = element_text(size = 9, hjust = 0, color = "grey45"),
+    legend.position = "bottom",
+    plot.margin = margin(12, 12, 12, 12)
+  )
+
+print(gender_map)
+
+# 8. Save the full map
+ggsave(
+  filename = "grambank-noun-gender.png",
+  plot = gender_map,
+  width = 12,
+  height = 7.2,
+  dpi = 300,
+  bg = "white"
+)
+```
+```{r}
+parameters |>
+  filter(parameter_id == "GB051") |>
+  View()
+```
+
+

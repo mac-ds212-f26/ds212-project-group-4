@@ -2,4 +2,28 @@
 title: "Case Study"
 ---
 
-Your case study go here.
+## [https://pudding.cool/2024/10/abortion-mazes/](https://pudding.cool/2024/10/abortion-mazes/)
+
+### Observations
+
+- The story unfolded through interaction
+  - Small amounts of text at a time
+- The data source was quite clear, and the way it was split up into smaller sections (states) was informative.
+- Had both general info about each state but then also personal stories.
+  - This added depth and breadth to the story which helped build a strong narrative. We saw both the human consequences of the restrictions as well as the concreteness of the policy decisions.
+- They also used the maze as another narrative device to make the reader feel the extra effort women have to go through to get an abortion, which made the whole thing feel very immersive. Oftentimes it feels like data storytelling can just be reading papers/sources and then indirectly tying them into visualizations, but this was not the case here.
+- The complexity scores do depend on how the authors choose to weigh the policies, so the mazes are illustrative and not direct translations.
+- For our project, we have a few takeaways from this story. It will be important to establish the question early, make sure our visualizations contribute to the main argument consistently, and use specific lower-level examples to make the patterns more meaningful.
+
+## [https://pudding.cool/2018/01/chyrons/](https://pudding.cool/2018/01/chyrons/)
+
+### Observations
+
+- The initial motivating examples (importance of television in modern media, concerns about partisan bias) motivated the need for the study very well
+- The story used very interesting visualization features such as triangles to compare with three different news channels. Each dot represents a word, which represents how frequent this word appears in that channel.
+- The way of explaining concepts is new, the most interesting part is the author highlights words and corresponds them to the graphs.
+  - We could try and implement the highlighting words and when the cursor is over that work it highlights the corresponding part of the graph
+    - The graphs change with the text
+- Data is clear, and it is from the Internet Archive. It was informative how they started
+- For our project, maybe we can use a similar graph technique to highlight the frequency of each variable, like how each variable relates to our topic. Also, we could organize our analysis around a series of increasingly specific questions. We can make each visualization raise another question so the analysis cascades gradually.
+
