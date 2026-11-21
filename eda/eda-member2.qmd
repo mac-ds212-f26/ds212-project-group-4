@@ -1,5 +1,148 @@
 ---
-title: "Member 2 First Name & Last Name Initial"
+title: "Bowen Tang's EDA"
 ---
 
 Your exploratory data analysis of the team datasets go here.
+
+```{r}
+library(sf)
+library(tidyverse)
+library(jsonlite)
+library(knitr)
+
+
+# 1.data
+
+data <- st_read("eda2-folder/fullDownload.geojson", quiet = TRUE)
+
+# Drop the map shapes so we just have a normal table
+all_table <- st_drop_geometry(data)
+
+# Keep only Atlanta
+atlanta <- all_table[all_table$city == "Atlanta", ]
+
+
+# 2. Dataset overview
+
+# Number of rows and columns
+nrow(atlanta)
+ncol(atlanta)
+
+# Variable names and types
+names(atlanta)
+
+variable_types <- data.frame(
+  Variable = names(atlanta),
+  Data_Type = sapply(atlanta, function(x) class(x)[1]),
+  row.names = NULL
+)
+variable_types
+
+
+# 3. Data quality
+
+# Missing values
+missing_values <- data.frame(
+  Variable = names(atlanta),
+  Missing_Count = colSums(is.na(atlanta)),
+  row.names = NULL
+)
+missing_values$Missing_Percentage <- round(
+  missing_values$Missing_Count / nrow(atlanta) * 100, 1
+)
+missing_values
+
+# Duplicates
+sum(duplicated(atlanta$holc_id))              # how many repeated IDs
+atlanta$holc_id[duplicated(atlanta$holc_id)]  # which IDs are repeated
+
+
+# 4. HOLC grade distribution
+
+# How many areas are in each grade
+table(atlanta$holc_grade)
+
+ggplot(atlanta, aes(x = holc_grade)) +
+  geom_bar() +
+  labs(title = "Atlanta HOLC Grade Distribution",
+       x = "HOLC Grade", y = "Number of Areas")
+
+
+# 5.Historical descriptions 
+
+atlanta$description <- NA_character_
+
+for (i in 1:nrow(atlanta)) {
+  text <- atlanta$area_description_data[i]
+
+  if (!is.na(text) && text != "") {
+    info <- fromJSON(text)
+    desc <- paste(unlist(info[["5"]]), collapse = " ")
+
+    if (desc != "") {
+      atlanta$description[i] <- desc
+    }
+  }
+}
+
+# 6. Historical neighborhood table 
+
+keep <- c()
+for (g in c("A", "B", "C", "D")) {
+  idx <- which(atlanta$holc_grade == g & !is.na(atlanta$description))
+  keep <- c(keep, head(idx, 3))
+}
+
+
+description_table <- atlanta[keep, c("holc_grade", "name", "description")]
+
+
+description_table$short_description <- str_trunc(description_table$description, width = 220)
+
+
+kable(
+  description_table[, c("holc_grade", "name", "short_description")],
+  col.names = c("HOLC Grade", "Neighborhood", "Historical Description"),
+  caption = "Historical Neighborhood Descriptions by HOLC Grade"
+)
+
+
+# 7. Historical Description Themes
+
+
+# Check whether each description mentions certain keywords (yes = 1, no = 0)
+atlanta$Housing <- as.numeric(grepl("house|housing|residential|construction",
+                                    atlanta$description, ignore.case = TRUE))
+atlanta$Race <- as.numeric(grepl("negro|white|racial|race",
+                                 atlanta$description, ignore.case = TRUE))
+atlanta$Property <- as.numeric(grepl("property|value|sales",
+                                     atlanta$description, ignore.case = TRUE))
+atlanta$Transportation <- as.numeric(grepl("railroad|traffic|streetcar|transportation",
+                                           atlanta$description, ignore.case = TRUE))
+
+
+has_desc <- atlanta[!is.na(atlanta$description) &
+                    atlanta$holc_grade %in% c("A", "B", "C", "D"), ]
+
+
+theme_table <- aggregate(cbind(Housing, Race, Property, Transportation) ~ holc_grade,
+                         data = has_desc, FUN = mean)
+theme_table[, 2:5] <- round(theme_table[, 2:5] * 100, 1)
+theme_table
+
+
+theme_long <- data.frame(
+  holc_grade = rep(theme_table$holc_grade, 4),
+  Theme = rep(c("Housing", "Race", "Property", "Transportation"), each = nrow(theme_table)),
+  Percentage = c(theme_table$Housing, theme_table$Race,
+                 theme_table$Property, theme_table$Transportation)
+)
+
+ggplot(theme_long, aes(x = holc_grade, y = Percentage, fill = Theme)) +
+  geom_col(position = "dodge") +
+  labs(title = "Historical Description Themes by HOLC Grade",
+       x = "HOLC Grade", y = "Percentage of Descriptions (%)")
+```
+
+```
+
