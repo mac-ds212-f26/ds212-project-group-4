@@ -16,7 +16,7 @@ library(knitr)
 options(tigris_use_cache = TRUE)
 ```
 
-My EDA uses data from the Census Bureau's ACS five-year estimates for 2020-2024. They provide tract-level estimates of household income across racial and ethnic categories, for my analysis. I merge these estimates using the Historic Redlining Indicator data used in the group project. (Note: we did use the same loading and merge code, but did separate EDAs)
+My EDA uses data from the Census Bureau's ACS five-year estimates for 2020-2024. These include separate estimates for different racial and ethnic groups. I combined these data with the Historic Redlining Indicator, which measures historical redlining at the census level. (Note: we did use the same loading and merge code, but did separate EDAs)
 
 ```{r}
 census_key <- readLines("../../ds212-portfolio-awaran-jpg/ica/census_api_key.txt")
@@ -230,7 +230,7 @@ ramsey_tracts %>%
 summary(ramsey_tracts$HRI2020)
 ```
 
-The subset has 143 census tracts, of which 73 have Historic Redlining Indicator (HRI) values. Among these tracts, HRI scores range from 1 to 4, with a median of 3. However, 70 tracts lack scores, which limits the geographic coverage of comparisons with HRI.
+The subset has 143 census tracts, of which 73 have Historic Redlining Indicator (HRI) values. Among these tracts, HRI scores range from 1 to 4, with a median of 3. Higher scores indicate less favorable historical Home Owners' Loan Corporation (HOLC) residential security grades and a greater degree of historical redlining. However, 70 tracts lack scores, which limits the geographic coverage of comparisons with HRI.
 
 ```{r}
 income_coverage <- ramsey %>%
@@ -389,7 +389,7 @@ income_difference %>%
 
 Among the census tracts with available estimates for both groups, White median household income exceeds Black median household income in approximately 84% of cases. The median within-tract difference is $28,410. These results provide further evidence of substantial racial income differences in Ramsey County.
 
-## Historical redlining and household income
+### Historical redlining and household income
 
 ```{r}
 hri_income <- ramsey %>%
@@ -438,4 +438,4 @@ ggplot(hri_income, aes(x = HRI2020, y = mdn_ncm)) +
   theme_minimal()
 ```
 
-The relationship between historical redlining and contemporary median household income appears negative for both Black and non-Hispanic White households. Tracts with higher HRI scores generally have lower income estimates, although there is  variation.
+The relationship between historical redlining and contemporary median household income appears negative for both Black and non-Hispanic White households. Tracts with higher HRI scores generally have lower income estimates, although there is  considerable variation. These comparisons include 40 tracts with available Black household income estimates and 71 with available non-Hispanic White household income estimates.
